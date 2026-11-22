@@ -3,6 +3,10 @@ import { logger } from "@/lib/logger";
 
 export const VAULT_KEY_API_ID      = 'telegram_api_id';
 export const VAULT_KEY_API_HASH    = 'telegram_api_hash';
+/**
+ * Legacy key. The session is no longer stored in the vault (the native side
+ * rejects it and scrubs old copies); it is kept only so logout can delete it.
+ */
 export const VAULT_KEY_SESSION     = 'telegram_session';
 export const VAULT_KEY_PHONE       = 'telegram_phone';
 /** Generic channel-ID key (legacy). Prefer channelIdKey(phone) for multi-account. */

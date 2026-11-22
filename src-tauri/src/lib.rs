@@ -54,45 +54,103 @@ async fn get_vault_state(app: tauri::AppHandle, lines: Option<usize>) -> Result<
     .map_err(|e| format!("get_vault_state task join error: {e}"))?
 }
 
-/// Saves the Telegram session string to a simple JSON file in the app data directory.
-/// This is reliable, fast, and survives dev-server restarts without Stronghold overhead.
+mod session_store;
+
+fn read_session_file(path: &Path) -> serde_json::Map<String, serde_json::Value> {
+    session_store::parse_session_file(std::fs::read_to_string(path).ok().as_deref())
+}
+
+/// Removes the legacy plain-text session copy from the vault file, if any.
+fn scrub_legacy_vault_session(app: &tauri::AppHandle) {
+    let Ok(_guard) = lock_vault() else { return };
+    let Ok(vault_path) = get_vault_path(app) else { return };
+    let Ok(contents) = std::fs::read_to_string(&vault_path) else { return };
+    let Ok(mut data) =
+        serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&contents)
+    else {
+        return;
+    };
+    if session_store::scrub_vault(&mut data) {
+        if let Ok(bytes) = serde_json::to_vec(&data) {
+            let _ = atomic_write(&vault_path, &bytes);
+        }
+    }
+}
+
+/// Saves the Telegram session. On desktop the secret goes to the OS credential
+/// store and the file keeps only the phone number; if the credential store
+/// fails, nothing is persisted and the session lives in memory for this run.
+/// On mobile it stays in the sandboxed app data directory.
 #[tauri::command]
 async fn save_session(app: tauri::AppHandle, session: String, phone: String) -> Result<(), String> {
     let session_path = get_session_path(&app)?;
-    let json = serde_json::json!({ "session": session, "phone": phone });
-    let payload = json.to_string().into_bytes();
     tauri::async_runtime::spawn_blocking(move || {
-        atomic_write(&session_path, &payload)
+        #[cfg(desktop)]
+        {
+            scrub_legacy_vault_session(&app);
+            session_store::save(&session_store::OsKeyring, &session)?;
+            atomic_write(
+                &session_path,
+                session_store::metadata_body(Some(&phone)).as_bytes(),
+            )
             .map_err(|e| format!("Failed to write session file: {e}"))
+        }
+        #[cfg(not(desktop))]
+        {
+            let _ = &app;
+            let payload = serde_json::json!({ "session": session, "phone": phone }).to_string();
+            atomic_write(&session_path, payload.as_bytes())
+                .map_err(|e| format!("Failed to write session file: {e}"))
+        }
     })
     .await
     .map_err(|e| format!("save_session task join error: {e}"))?
 }
 
-/// Loads the Telegram session string from the app data directory.
-/// Returns null fields if no session file exists.
+/// Loads the Telegram session as `{ session, phone }` (null fields when none).
+/// On desktop a legacy plain-text session is migrated into the OS credential
+/// store and scrubbed from the file and the vault.
 #[tauri::command]
 async fn load_session(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let session_path = get_session_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        if !session_path.exists() {
-            return Ok(serde_json::json!({ "session": null, "phone": null }));
+        let file = read_session_file(&session_path);
+        #[cfg(desktop)]
+        {
+            scrub_legacy_vault_session(&app);
+            let outcome = session_store::load(&session_store::OsKeyring, &file);
+            if let Some(body) = outcome.rewrite_file {
+                atomic_write(&session_path, body.as_bytes())
+                    .map_err(|e| format!("Failed to scrub session file: {e}"))?;
+            }
+            Ok(serde_json::json!({ "session": outcome.session, "phone": outcome.phone }))
         }
-        let contents = std::fs::read_to_string(&session_path)
-            .map_err(|e| format!("Failed to read session file: {e}"))?;
-        let parsed: serde_json::Value = serde_json::from_str(&contents)
-            .map_err(|e| format!("Failed to parse session file: {e}"))?;
-        Ok(parsed)
+        #[cfg(not(desktop))]
+        {
+            let _ = &app;
+            Ok(serde_json::json!({
+                "session": file.get("session").cloned().unwrap_or(serde_json::Value::Null),
+                "phone": file.get("phone").cloned().unwrap_or(serde_json::Value::Null),
+            }))
+        }
     })
     .await
     .map_err(|e| format!("load_session task join error: {e}"))?
 }
 
-/// Clears the saved session file (used on logout).
+/// Clears the saved session and phone (used on logout and stale sessions).
 #[tauri::command]
 async fn clear_session(app: tauri::AppHandle) -> Result<(), String> {
     let session_path = get_session_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(desktop)]
+        {
+            use session_store::SecretStore as _;
+            scrub_legacy_vault_session(&app);
+            session_store::OsKeyring.delete()?;
+        }
+        #[cfg(not(desktop))]
+        let _ = &app;
         if session_path.exists() {
             std::fs::remove_file(&session_path)
                 .map_err(|e| format!("Failed to delete session file: {e}"))?;
@@ -109,18 +167,20 @@ async fn clear_session(app: tauri::AppHandle) -> Result<(), String> {
 async fn clear_session_only(app: tauri::AppHandle) -> Result<(), String> {
     let session_path = get_session_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(desktop)]
+        {
+            use session_store::SecretStore as _;
+            scrub_legacy_vault_session(&app);
+            session_store::OsKeyring.delete()?;
+        }
+        #[cfg(not(desktop))]
+        let _ = &app;
         if !session_path.exists() {
             return Ok(());
         }
-        let contents = std::fs::read_to_string(&session_path)
-            .map_err(|e| format!("Failed to read session file: {e}"))?;
-        let mut parsed: serde_json::Value = serde_json::from_str(&contents)
-            .map_err(|e| format!("Failed to parse session file: {e}"))?;
-        // Null out the session token but keep the phone number
-        if let Some(obj) = parsed.as_object_mut() {
-            obj.insert("session".to_string(), serde_json::Value::Null);
-        }
-        atomic_write(&session_path, parsed.to_string().as_bytes())
+        let file = read_session_file(&session_path);
+        let phone = file.get("phone").and_then(|v| v.as_str());
+        atomic_write(&session_path, session_store::metadata_body(phone).as_bytes())
             .map_err(|e| format!("Failed to write session file: {e}"))
     })
     .await
@@ -220,6 +280,11 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /// Saves a key-value pair to a vault file in the app data directory.
 #[tauri::command]
 fn save_vault_value(app: tauri::AppHandle, key: String, value: String) -> Result<(), String> {
+    // The session is a credential and belongs in `save_session` (OS credential
+    // store on desktop). Never keep a plain copy in the vault file.
+    if key == session_store::LEGACY_VAULT_SESSION_KEY {
+        return Err("The Telegram session cannot be stored in the vault file".into());
+    }
     let _guard = lock_vault()?;
     let vault_path = get_vault_path(&app)?;
     let mut data = if vault_path.exists() {

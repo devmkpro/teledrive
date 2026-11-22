@@ -29,7 +29,6 @@ import { initClient, getClient, disconnectClient } from "@/lib/telegram/client";
 import {
   saveSecret,
   getSecret,
-  VAULT_KEY_SESSION,
   VAULT_KEY_PHONE,
   VAULT_KEY_API_ID,
   VAULT_KEY_API_HASH,
@@ -645,6 +644,9 @@ export default function AuthPage() {
         }
       }
 
+      // The session goes only to save_session (OS credential store on
+      // desktop). If that fails it stays in memory for this run and the user
+      // signs in again next launch; it is never written to the vault file.
       try {
         await invoke("save_session", { session: sessionString, phone: authPhone });
       } catch (saveErr) {
@@ -652,7 +654,6 @@ export default function AuthPage() {
       }
 
       try {
-        await saveSecret(VAULT_KEY_SESSION, sessionString);
         await saveSecret(VAULT_KEY_PHONE, authPhone);
       } catch (vaultErr) {
         logger.warn("Stronghold saveSecret failed (non-fatal):", vaultErr);
