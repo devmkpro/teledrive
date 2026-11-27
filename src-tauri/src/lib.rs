@@ -6,6 +6,11 @@ use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex as AsyncMutex;
 
+pub mod biometrics;
+use biometrics::{authenticate_device_owner, check_biometrics_available};
+mod desktop_settings;
+mod proxy;
+
 #[tauri::command]
 async fn log_vault_state(app: tauri::AppHandle, state: String) {
     let log_path = if let Ok(data_dir) = app.path().app_data_dir() {
@@ -169,7 +174,7 @@ fn temp_sibling(path: &Path, suffix: &str) -> Result<PathBuf, String> {
 /// exists, so fall back to copy + remove without deleting the old file first.
 /// When `private` is true the temp and destination are restricted to the
 /// current user (mode 0600 on Unix), which is required for credential files.
-fn atomic_write_with_perms(path: &Path, bytes: &[u8], private: bool) -> Result<(), String> {
+pub(crate) fn atomic_write_with_perms(path: &Path, bytes: &[u8], private: bool) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("no parent directory for {}", path.display()))?;
@@ -1484,7 +1489,9 @@ fn open_telegram_app(app: tauri::AppHandle, url: String) -> Result<(), String> {
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("TeleDrive") {
         let _ = window.show();
-        let _ = window.unminimize();
+        if window.is_minimized().unwrap_or(false) {
+            let _ = window.unminimize();
+        }
         let _ = window.set_focus();
     }
 }
@@ -1503,6 +1510,7 @@ fn setup_desktop_shell(app: &tauri::App) -> tauri::Result<()> {
 
     let mut tray = TrayIconBuilder::with_id("main")
         .menu(&menu)
+        .tooltip("TeleDrive — Running in background")
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_main_window(app),
@@ -1541,11 +1549,20 @@ fn setup_desktop_shell(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Build the Tauri application.
-    // Some plugins are desktop-only (shell, process) because they rely on
-    // system binaries that are not available in Android/iOS sandboxes.
+    // Some plugins are desktop-only (single-instance, shell, process) because they rely on
+    // desktop windowing or system APIs that are not available in Android/iOS sandboxes.
     // The cfg(mobile) / cfg(not(mobile)) guards below ensure the correct
     // plugin set is registered at compile time for each target platform.
-    let builder = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    // Register single-instance FIRST on desktop so secondary launches focus the
+    // running instance and exit before Stronghold, tray icons, or file watchers initialize.
+    #[cfg(not(mobile))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        show_main_window(app);
+    }));
+
+    let builder = builder
         .plugin(
             tauri_plugin_stronghold::Builder::new(|password| {
                 // Fixed salt for local vault key derivation
@@ -1563,13 +1580,19 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init());
 
-    // Desktop-only plugins: shell and process are not available on Android/iOS
+    // Desktop-only plugins: autostart, shell, and process are not available on Android/iOS
     #[cfg(not(mobile))]
     let builder = builder
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name("TeleDrive")
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init());
 
     builder
+        .manage(proxy::ProxySocketState::default())
         .invoke_handler(tauri::generate_handler![
             log_vault_state,
             get_vault_state,
@@ -1602,16 +1625,44 @@ pub fn run() {
             cleanup_preview_cache,
             open_file_in_system_viewer,
             open_telegram_app,
+            check_biometrics_available,
+            authenticate_device_owner,
+            desktop_settings::get_desktop_startup_settings,
+            desktop_settings::set_launch_at_login,
+            desktop_settings::set_start_minimized_to_tray,
+            proxy::get_proxy_settings,
+            proxy::save_proxy_settings,
+            proxy::test_proxy_connection,
+            proxy::discover_telegram_route,
+            proxy::proxy_socket_connect,
+            proxy::proxy_socket_write,
+            proxy::proxy_socket_close,
         ])
         .setup(|app| {
+            #[cfg(not(mobile))]
+            let start_minimized = desktop_settings::load_sync(app.handle()).start_minimized_to_tray;
+            #[cfg(mobile)]
+            let start_minimized = false;
+
+            if let Some(window_config) = app.config().app.windows.first().cloned() {
+                let mut window_builder =
+                    tauri::WebviewWindowBuilder::from_config(app.handle(), &window_config)?;
+                if start_minimized {
+                    window_builder = window_builder.visible(false);
+                }
+                window_builder.build()?;
+            }
+
             #[cfg(not(mobile))]
             setup_desktop_shell(app)?;
 
             #[cfg(debug_assertions)]
             {
                 #[cfg(not(mobile))]
-                if let Some(window) = app.get_webview_window("TeleDrive") {
-                    window.open_devtools();
+                if !start_minimized {
+                    if let Some(window) = app.get_webview_window("TeleDrive") {
+                        window.open_devtools();
+                    }
                 }
             }
             Ok(())

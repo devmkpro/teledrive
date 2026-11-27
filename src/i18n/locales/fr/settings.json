@@ -10,7 +10,9 @@
     "language": "Langue",
     "storage": "Stockage",
     "about": "À propos",
-    "encryption": "Chiffrement"
+    "encryption": "Chiffrement",
+    "security": "Security & App Lock",
+    "general": "Général"
   },
   "language": {
     "title": "Langue",
@@ -350,6 +352,107 @@
       "unlocked": "Coffre déverrouillé.",
       "locked": "Coffre verrouillé.",
       "disabled": "Configuration locale supprimée."
+    }
+  },
+  "security": {
+    "title": "Security & App Lock",
+    "description": "Protect TeleDrive on this device when you step away.",
+    "enableLock": "Enable App Lock",
+    "enableLockDesc": "Require authentication whenever TeleDrive is opened or idle.",
+    "methodHeader": "Unlock Method",
+    "methods": {
+      "biometricTitle": "Device Password & Biometrics",
+      "biometricDesc": "Unlock using Touch ID, Face ID, Windows Hello, or your computer login password. No new password to memorize.",
+      "biometricRecommended": "Recommended",
+      "customTitle": "Custom TeleDrive Passcode",
+      "customDesc": "Set a dedicated 4–6 digit numeric PIN or alphanumeric password specifically for TeleDrive.",
+      "changePasscode": "Change Passcode"
+    },
+    "cadenceHeader": "Locking Cadence",
+    "cadence": {
+      "title": "Auto-Lock Timeout",
+      "desc": "Automatically lock after a period of inactivity.",
+      "immediate": "Immediately when minimized",
+      "1m": "After 1 minute of inactivity",
+      "5m": "After 5 minutes of inactivity (Recommended)",
+      "15m": "After 15 minutes of inactivity",
+      "1h": "After 1 hour of inactivity",
+      "never": "Never (Only manual lock)"
+    },
+    "options": {
+      "lockOnMinimize": "Lock on Minimize",
+      "lockOnMinimizeDesc": "Lock immediately when the application window is minimized or hidden.",
+      "privacyShield": "Window Privacy Shield",
+      "privacyShieldDesc": "Obfuscate content preview in Mission Control, Alt-Tab, and mobile recents."
+    },
+    "shortcutHint": "Tip: You can quickly lock TeleDrive at any time by pressing Cmd+L (macOS) or Ctrl+L (Windows/Linux).",
+    "toasts": {
+      "enabled": "App lock enabled!",
+      "disabled": "App lock disabled.",
+      "switchedBio": "Using device credentials & biometrics.",
+      "passcodeSaved": "App lock passcode updated successfully!"
+    },
+    "dialog": {
+      "setTitle": "Set App Lock Passcode",
+      "changeTitle": "Change Passcode",
+      "pinHint": "Enter a 4-to-6 digit numeric PIN.",
+      "passphraseHint": "Enter a master passphrase.",
+      "currentPass": "Current Passcode",
+      "newPass": "New Passcode",
+      "confirmPass": "Confirm New Passcode",
+      "cancel": "Cancel",
+      "save": "Save Passcode"
+    },
+    "errors": {
+      "wrongCurrentPass": "Current passcode is incorrect.",
+      "pinFormat": "PIN must be between 4 and 6 digits.",
+      "passphraseLength": "Passphrase must be at least 6 characters.",
+      "mismatch": "Passcodes do not match.",
+      "saveFailed": "Failed to save new passcode."
+    },
+    "lockScreen": {
+      "title": "TeleDrive is Locked",
+      "lockedBadge": "Locked",
+      "touchId": "Unlock with Touch ID",
+      "faceId": "Unlock with Face ID",
+      "windowsHello": "Unlock with Windows Hello",
+      "deviceCreds": "Unlock with Device Password",
+      "biometricHint": "Touch your fingerprint sensor or enter your device password.",
+      "enterPassphrase": "Enter master passphrase",
+      "unlockBtn": "Unlock",
+      "wrongPin": "Incorrect PIN. Please try again.",
+      "wrongPasscode": "Incorrect passcode. Please try again.",
+      "cooldown": "Too many failed attempts. Try again in {{seconds}}s.",
+      "forgot": "Forgot passcode?",
+      "forgotTitle": "Forgot Your Passcode?",
+      "forgotDescription": "To protect your privacy, TeleDrive cannot recover a forgotten passcode. Resetting it will sign you out of this device and remove the lock. All your files and backups remain completely safe and untouched in your Telegram cloud.",
+      "cancel": "Cancel",
+      "resetAndLogout": "Sign Out & Reset Lock"
+    }
+  },
+  "general": {
+    "title": "Général",
+    "description": "Configurez le démarrage de TeleDrive à l'ouverture de session et son fonctionnement dans la zone de notification.",
+    "startup": {
+      "title": "Démarrage et zone de notification",
+      "description": "Gérez indépendamment le lancement automatique et le démarrage silencieux en arrière-plan.",
+      "launchAtLogin": {
+        "title": "Lancer à l'ouverture de session",
+        "description": "Démarre automatiquement TeleDrive lors de votre connexion afin de maintenir vos sauvegardes planifiées et la synchronisation actives."
+      },
+      "startMinimized": {
+        "title": "Démarrer réduit dans la barre d'état",
+        "description": "Garde la fenêtre principale masquée dans la zone de notification au lancement sans interrompre votre bureau."
+      }
+    },
+    "callout": "<strong>Fonctionnement en arrière-plan :</strong> Lorsque TeleDrive démarre silencieusement, il reste actif dans votre zone de notification avec les sauvegardes et la synchronisation en cours. Cliquez sur l'icône ou relancez TeleDrive pour afficher la fenêtre.",
+    "toasts": {
+      "launchAtLoginEnabled": "TeleDrive démarrera automatiquement à la connexion.",
+      "launchAtLoginDisabled": "TeleDrive a été retiré des applications au démarrage.",
+      "launchAtLoginFailed": "Impossible de mettre à jour le démarrage automatique.",
+      "startMinimizedEnabled": "TeleDrive démarrera réduit dans la zone de notification.",
+      "startMinimizedDisabled": "TeleDrive affichera la fenêtre principale au démarrage.",
+      "startMinimizedFailed": "Impossible de mettre à jour l'option de fenêtre au démarrage."
     }
   }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "teledrive"
-version = "0.1.4"
+version = "0.1.5"
 description = "A modern, cross-platform, zero-overhead cloud storage application that transforms a private Telegram channel into your own unlimited personal drive"
 authors = ["Sayan Senapati <sayansenapati2544@gmail.com>"]
 edition = "2021"
@@ -26,6 +26,7 @@ path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+cc = "1.0"
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
@@ -39,12 +40,17 @@ tauri-plugin-shell = "2.5.0"
 tauri-plugin-process = "2.4.0"
 argon2 = "0.5.3"
 sha2 = "0.10"
-tokio = { version = "1", features = ["sync", "time"] }
+aes = "0.8"
+ctr = "0.9"
+getrandom = "0.2"
+tokio = { version = "1", features = ["sync", "time", "net", "io-util"] }
 
-# Tray icons are desktop-only; keep the feature off mobile builds so the
-# underlying platform crates are never pulled into Android/iOS.
+# Tray icons, autostart, and single-instance locking are desktop-only; keep them
+# off mobile builds so the underlying platform crates are never pulled into Android/iOS.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
+tauri-plugin-autostart = "2.7.0"
+tauri-plugin-single-instance = "2.5.5"
 notify = "8.2"
 
 [profile.release]
